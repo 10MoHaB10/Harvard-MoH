@@ -7,13 +7,13 @@ from telegram.ext import (
 )
 
 TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = 6871615592
+OWNER_ID = 6871615592  # غيّره لو لازم
 
 DATA_FILE = "data.json"
 WELCOME_FILE = "welcome.txt"
 
 app = FastAPI()
-bot_app = None  # هذا سيكون التطبيق الرئيسي للبوت
+bot_app = None  # التطبيق الرئيسي للبوت
 
 def load_data():
     try:
@@ -86,7 +86,7 @@ def main():
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     PORT = int(os.environ.get("PORT", 8000))
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # هذا رابط ويب الخاص بك مع /webhook
+    WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # مثال: https://yourapp.up.railway.app/webhook
 
     print(f"Starting webhook on port {PORT} with url {WEBHOOK_URL}")
 
@@ -96,5 +96,5 @@ def main():
         webhook_url=WEBHOOK_URL
     )
 
-if name == "__main__":
+if __name__ == "__main__":
     main()
