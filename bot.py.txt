@@ -1,11 +1,9 @@
-﻿import os
+import os
 import json
 from fastapi import FastAPI, Request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, ContextTypes,
-    CommandHandler, MessageHandler,
-    filters, CallbackQueryHandler
+    Application, CommandHandler, MessageHandler, filters, ContextTypes
 )
 
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -14,172 +12,89 @@ OWNER_ID = 6871615592
 DATA_FILE = "data.json"
 WELCOME_FILE = "welcome.txt"
 
+app = FastAPI()
+bot_app = None  # هذا سيكون التطبيق الرئيسي للبوت
+
 def load_data():
-    if not os.path.exists(DATA_FILE):
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
         return {}
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def load_welcome():
-    if not os.path.exists(WELCOME_FILE):
+    try:
+        with open(WELCOME_FILE, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
         return "مرحبًا بك في البوت!"
-    with open(WELCOME_FILE, "r", encoding="utf-8") as f:
-        return f.read()
 
 def save_welcome(text):
     with open(WELCOME_FILE, "w", encoding="utf-8") as f:
         f.write(text)
-
-app = FastAPI()
-bot_app = None
 
 @app.post("/webhook")
 async def webhook(req: Request):
     data = await req.json()
     update = Update.de_json(data, bot_app.bot)
     await bot_app.update_queue.put(update)
+    return {"ok": True}
+
+# أوامر البوت
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("هذه الأوامر محصورة فقط على صاحب البوت.")
         return
     await update.message.reply_text(load_welcome())
 
 async def set_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("هذه الأوامر محصورة فقط على صاحب البوت.")
         return
     if context.args:
         text = " ".join(context.args)
         save_welcome(text)
         await update.message.reply_text("تم تحديث رسالة الترحيب ✅")
     else:
-        await update.message.reply_text("استخدم الأمر مع النص الجديد:\n/setwelcome مرحبًا بك!")
-
-async def add_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    await update.message.reply_text("أرسل الكلمة المفتاحية التي تريد ربط الرد بها.")
-
-    def check(msg): return msg.from_user.id == OWNER_ID
-
-    try:
-        response = await context.bot.wait_for_message(filters=filters.TEXT, timeout=60)
-    except:
-        response = None
-
-    if not response:
-        await update.message.reply_text("انتهى الوقت ⏰")
-        return
-    keyword = response.text.lower()
-    await update.message.reply_text(f"أرسل الرد المرتبط بـ: {keyword}")
-
-    try:
-        content = await context.bot.wait_for_message(timeout=120)
-    except:
-        content = None
-
-    if not content:
-        await update.message.reply_text("انتهى الوقت ⏰")
-        return
-
-    data = load_data()
-    data[keyword] = {
-        "text": content.text or "",
-        "file_id": content.document.file_id if content.document else "",
-        "buttons": []
-    }
-    save_data(data)
-    await update.message.reply_text("تم حفظ الرد ✅")
-
-async def add_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    args = context.args
-    if len(args) < 3:
-        await update.message.reply_text("استخدام الأمر:\n/addbutton كلمة_الرد نص_الزر رابط_الزر")
-        return
-
-    keyword = args[0].lower()
-    button_text = args[1]
-    button_url = args[2]
-
-    data = load_data()
-    if keyword not in data:
-        await update.message.reply_text("الكلمة المفتاحية غير موجودة.")
-        return
-
-    if "buttons" not in data[keyword]:
-        data[keyword]["buttons"] = []
-
-    data[keyword]["buttons"].append({"text": button_text, "url": button_url})
-    save_data(data)
-    await update.message.reply_text(f"تم إضافة الزر إلى الرد '{keyword}'.")
-
-async def del_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    args = context.args
-    if len(args) < 2:
-        await update.message.reply_text("استخدام الأمر:\n/delbutton كلمة_الرد رقم_الزر")
-        return
-
-    keyword = args[0].lower()
-    try:
-        btn_index = int(args[1]) - 1
-    except ValueError:
-        await update.message.reply_text("رقم الزر يجب أن يكون رقمًا صحيحًا.")
-        return
-
-    data = load_data()
-
-MoHaB, [05/06/2025 05:19 ص]
-if keyword not in data:
-        await update.message.reply_text("الكلمة المفتاحية غير موجودة.")
-        return
-
-    buttons = data[keyword].get("buttons", [])
-    if btn_index < 0 or btn_index >= len(buttons):
-        await update.message.reply_text("رقم الزر غير صحيح.")
-        return
-
-    removed = buttons.pop(btn_index)
-    data[keyword]["buttons"] = buttons
-    save_data(data)
-    await update.message.reply_text(f"تم حذف الزر '{removed['text']}' من الرد '{keyword}'.")
+        await update.message.reply_text("يرجى كتابة نص رسالة الترحيب بعد الأمر.\nمثال:\n/setwelcome مرحبًا بكم في البوت!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     data = load_data()
     if text in data:
         entry = data[text]
-        if entry.get("file_id"):
-            await update.message.reply_document(document=InputFile(entry["file_id"]))
         reply_markup = None
         if entry.get("buttons"):
             keyboard = [[InlineKeyboardButton(btn["text"], url=btn["url"])] for btn in entry["buttons"]]
             reply_markup = InlineKeyboardMarkup(keyboard)
         if entry.get("text"):
             await update.message.reply_text(entry["text"], reply_markup=reply_markup)
+        elif entry.get("file_id"):
+            await update.message.reply_document(entry["file_id"], reply_markup=reply_markup)
 
-def run():
+def main():
     global bot_app
     bot_app = Application.builder().token(TOKEN).build()
 
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("setwelcome", set_welcome))
-    bot_app.add_handler(CommandHandler("add", add_response))
-    bot_app.add_handler(CommandHandler("addbutton", add_button))
-    bot_app.add_handler(CommandHandler("delbutton", del_button))
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    PORT = int(os.environ.get("PORT", 8000))
+    WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # هذا رابط ويب الخاص بك مع /webhook
+
+    print(f"Starting webhook on port {PORT} with url {WEBHOOK_URL}")
 
     bot_app.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url=os.environ.get("WEBHOOK_URL")
+        port=PORT,
+        webhook_url=WEBHOOK_URL
     )
 
 if name == "__main__":
-    run()
+    main()
